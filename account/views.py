@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.permissions import IsAuthenticated
 
 class OTPRequestView(APIView):
     def post(self, request, *args, **kwargs):
@@ -17,7 +18,10 @@ class OTPRequestView(APIView):
 
             try:
                 otp = generate_otp()
+                print('generated otp :', otp)
                 request.session['otp'] = otp  # Store OTP in session
+                session_otp =  request.session['otp']   # Store OTP in session
+                print('saved otp while email senting',session_otp)
                 send_otp_email(email, username, otp)  # Send OTP via email
                 response_data = {"message": "OTP sent successfully"}
                 return Response(response_data, status=status.HTTP_200_OK)
@@ -51,14 +55,12 @@ class OTPVerificationView(APIView):
 
                 refresh = RefreshToken.for_user(user)
 
-                user_data = {
-                    'id': user.id,
-                    'username': user.username,
-                    'email': user.email
-                }
+                
 
                 response_data = {
-                    'user': user_data,
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
                     'access_token': str(refresh.access_token),
                     'refresh_token': str(refresh),
                 }
@@ -67,3 +69,9 @@ class OTPVerificationView(APIView):
                 return Response({'error': 'Invalid OTP entered'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+class ProtectedView(APIView):
+    permission_classes=[IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        return Response({"message": "Token is valid"})
