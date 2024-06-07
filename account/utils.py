@@ -16,3 +16,5 @@ def send_otp_email(email, contact_name, otp):
     sender = settings.EMAIL_HOST_USER  # Sender's email address
     recipient_list = [email]
     send_mail(subject, message, sender, recipient_list)
+
+
