@@ -6,6 +6,9 @@ from rest_framework.views import APIView
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
+from .models import OTP
+from django.utils import timezone
+from datetime import timedelta
 
 class OTPRequestView(APIView):
     def post(self, request, *args, **kwargs):
@@ -13,15 +16,17 @@ class OTPRequestView(APIView):
         if serializer.is_valid():
             email = serializer.validated_data['email']
             username = email.split('@')[0]
-            request.session['email'] = email
-            request.session['username'] = username
 
             try:
                 otp = generate_otp()
-                print('generated otp :', otp)
-                request.session['otp'] = otp  # Store OTP in session
-                session_otp =  request.session['otp']   # Store OTP in session
-                print('saved otp while email senting',session_otp)
+                print('Generated OTP:', otp)
+
+                # Create or update OTP entry
+                OTP.objects.update_or_create(
+                    email=email,
+                    defaults={'otp': otp, 'expires_at': timezone.now() + timedelta(minutes=10)}
+                )
+
                 send_otp_email(email, username, otp)  # Send OTP via email
                 response_data = {"message": "OTP sent successfully"}
                 return Response(response_data, status=status.HTTP_200_OK)
@@ -33,30 +38,29 @@ class OTPRequestView(APIView):
 
 class OTPVerificationView(APIView):
     def post(self, request, *args, **kwargs):
+        print("Request data:", request.data)  # Debugging: Print request data
         serializer = OTPSerializer(data=request.data)
         if serializer.is_valid():
-            entered_otp = serializer.validated_data['otp']
-            email = request.session.get('email')
-            saved_otp = request.session.get('otp')
-            
-            # Debugging print statement
-            print("Saved OTP:", saved_otp)
-            print("Entered OTP:", entered_otp)
+            entered_otp = serializer.validated_data.get('otp')
+            email = serializer.validated_data.get('email')
 
-            if saved_otp is None:
-                return Response({'error': 'OTP has expired or is invalid'}, status=status.HTTP_400_BAD_REQUEST)
+            if entered_otp is None or email is None:
+                return Response({'error': 'OTP and email are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-            if entered_otp == saved_otp:
-                try:
-                    user = User.objects.get(email=email)
-                except User.DoesNotExist:
-                    username = request.session.get('username')
-                    user = User.objects.create(username=username, email=email)
-
-                refresh = RefreshToken.for_user(user)
-
+            try:
+                otp_record = OTP.objects.get(email=email, otp=entered_otp)
                 
+                # Debugging print statement
+                print("Saved OTP:", otp_record.otp)
+                print("Entered OTP:", entered_otp)
 
+                if not otp_record.is_valid():
+                    otp_record.delete()  # Clean up expired OTP
+                    return Response({'error': 'OTP has expired or is invalid'}, status=status.HTTP_400_BAD_REQUEST)
+
+                user, created = User.objects.get_or_create(email=email, defaults={'username': email.split('@')[0]})
+                refresh = RefreshToken.for_user(user)
+                
                 response_data = {
                     'id': user.id,
                     'username': user.username,
@@ -64,14 +68,17 @@ class OTPVerificationView(APIView):
                     'access_token': str(refresh.access_token),
                     'refresh_token': str(refresh),
                 }
+                
+                otp_record.delete()  # Clean up used OTP
                 return Response(response_data, status=status.HTTP_200_OK)
-            else:
+            except OTP.DoesNotExist:
                 return Response({'error': 'Invalid OTP entered'}, status=status.HTTP_400_BAD_REQUEST)
         else:
+            print("Serializer errors:", serializer.errors)  # Debugging: Print serializer errors
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
 class ProtectedView(APIView):
-    permission_classes=[IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         return Response({"message": "Token is valid"})
