@@ -173,4 +173,4 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587  # Use 465 for SSL/TLS connection
 EMAIL_USE_TLS = True  # Enable TLS (Transport Layer Security)
 EMAIL_HOST_USER = 'hariporter777@gmail.com'  # Your Gmail email address
-EMAIL_HOST_PASSWORD = 'mdna lafx aznk mavf'
+EMAIL_HOST_PASSWORD = "lpdo gjub spxz unel"
